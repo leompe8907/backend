@@ -197,5 +197,5 @@ if CELERY_BROKER_URL and CELERY_BROKER_URL.startswith('rediss://'):
     BROKER_USE_SSL = {
         'ssl_cert_reqs': os.getenv('REDIS_SSL_CERT_REQS', 'CERT_NONE')
     }
-    CELERY_BROKER_TRANSPORT_OPTIONS = {'broker_use_ssl': BROKER_USE_SSL}
-    CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {'backend_use_ssl': BROKER_USE_SSL}
+    CELERY_BROKER_TRANSPORT_OPTIONS = {'ssl_cert_reqs': BROKER_USE_SSL['ssl_cert_reqs']}
+    CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {'ssl_cert_reqs': BROKER_USE_SSL['ssl_cert_reqs']}
