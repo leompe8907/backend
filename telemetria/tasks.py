@@ -1,9 +1,9 @@
 from celery import shared_task
-from .views import TestFetchAndStoreTelemetryDataView, UpdateDataOTT, UpdateDataDVB, UpdateDataEndCatchup, UpdateDataStopVOD, UpdateDataEndVOD
+from .views import TestFetchAndStoreTelemetry, UpdateDataOTT, UpdateDataDVB, UpdateDataEndCatchup, UpdateDataStopVOD, UpdateDataEndVOD
 
 @shared_task
 def test_fetch_store_telemetry():
-    view = TestFetchAndStoreTelemetryDataView()
+    view = TestFetchAndStoreTelemetry()
     request = None  # Puede que necesites construir un request adecuado aquí
     view.post(request)
 
