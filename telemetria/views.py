@@ -40,7 +40,7 @@ import hashlib
 import requests
 
 from .models import Telemetria, MergedTelemetricOTT, MergedTelemetricDVB, MergedTelemetricStopCatchup, MergedTelemetricEndCatchup, MergedTelemetricStopVOD, MergedTelemetricEndVOD  # Importa los modelos necesarios
-from .serializer import TelemetriaSerializer, MergedTelemetricOTTSerializer, MergedTelemetricDVBSerializer, MergedTelemetricCatchupSerializer, MergedTelemetricVODSerializer # Importa los serializadores necesarios
+from .serializer import MergedTelemetricEndCatchupSerializer, MergedTelemetricStopCatchupSerializer, TelemetriaSerializer, MergedTelemetricOTTSerializer, MergedTelemetricDVBSerializer# Importa los serializadores necesarios
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +400,8 @@ class MergeData(APIView):
             # Registrar el error para futuras investigaciones
             return Response({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+#--------------------------------------------------------------------------------#
+
 ## actualización de los datos de OTT
 class UpdateDataOTT(APIView):
     @staticmethod
@@ -548,16 +550,13 @@ class UpdateDataDVB(APIView):
         
         # Devuelve una respuesta con los datos serializados
         return Response(serializer.data, status=status.HTTP_200_OK)
+
 ## actualización de los datos de catchup pausado
 class UpdateDataStopCatchup(APIView):
     def dataStop(self):
-        # Obtener datos filtrados por actionId=17
         telemetria_data_actionid16 = Telemetria.objects.filter(actionId=16).values()
-        
-        # Obtener datos filtrados por actionId=6
         telemetria_data_actionid17 = Telemetria.objects.filter(actionId=17).values()
 
-        # Fusionar los datos relacionados
         merged_data = []
         for item17 in telemetria_data_actionid17:
             matching_item16 = next((item16 for item16 in telemetria_data_actionid16 if item16['dataId'] == item17['dataId']), None)
@@ -566,74 +565,44 @@ class UpdateDataStopCatchup(APIView):
             merged_data.append(item17)
 
         return merged_data
+
     def post(self, request):
         try:
-            # Obtener datos fusionados
             merged_data = self.dataStop()
-            # Obtener el máximo valor de recordId en la tabla MergedTelemetricStopCatchup
-            id_maximo_registro = MergedTelemetricStopCatchup.objects.aggregate(max_record=Max('recordId'))['max_record']
-
-            # Manejar el caso en el que id_maximo_registro sea None
-            if id_maximo_registro is None:
-                id_maximo_registro = 0
-
-            # Filtrar los registros que tengan un recordId mayor que id_maximo_registro
+            id_maximo_registro = MergedTelemetricStopCatchup.objects.aggregate(max_record=Max('recordId'))['max_record'] or 0
             registros_filtrados = [registro for registro in merged_data if registro['recordId'] > id_maximo_registro]
 
-            # Verificar si no hay registros filtrados
             if not registros_filtrados:
                 return Response({"message": "No hay nuevos registros para crear"}, status=status.HTTP_200_OK)
 
-            # Verificar si el máximo registro en la base de datos es igual al máximo entre los registros filtrados
-            if id_maximo_registro == max(registro['recordId'] for registro in registros_filtrados):
-                return Response({"message": "No hay nuevos registros para crear"}, status=status.HTTP_200_OK)
-
-            # Verificar si la tabla MergedTelemetricStopCatchup está vacía
             if not MergedTelemetricStopCatchup.objects.exists():
-                # Crear objetos MergedTelemetricStopCatchup utilizando bulk_create si la tabla está vacía
                 MergedTelemetricStopCatchup.objects.bulk_create([MergedTelemetricStopCatchup(**data) for data in merged_data])
                 return Response({"message": "Creación exitosa en base vacía"}, status=status.HTTP_200_OK)
             else:
-                # Crear objetos MergedTelemetricStopCatchup utilizando bulk_create si la tabla no está vacía
                 MergedTelemetricStopCatchup.objects.bulk_create([MergedTelemetricStopCatchup(**data) for data in registros_filtrados])
                 return Response({"message": "Creación exitosa en base llena"}, status=status.HTTP_200_OK)
 
         except IntegrityError:
             return Response({"error": "Error de integridad al guardar datos"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
         except ValidationError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get(self, request, *args, **kwargs):
-        # Obtiene todos los objetos de la tabla MergedTelemetricStopCatchup en la base de datos
         data = MergedTelemetricStopCatchup.objects.all()
-        
-        # Serializa los datos obtenidos utilizando tu propio serializador
-        serializer = MergedTelemetricCatchupSerializer(data, many=True)
-        
-        # Devuelve una respuesta con los datos serializados
+        serializer = MergedTelemetricStopCatchupSerializer(data, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 ## actualización de los datos de catchup terminado
 class UpdateDataEndCatchup(APIView):
     @staticmethod
     def dataEnd():
-        # Obtener datos filtrados por actionId=16 y 18 en una sola consulta
         telemetria_data = Telemetria.objects.filter(actionId__in=[16, 18]).only('dataId', 'actionId', 'dataName').iterator()
-
-        # Crear diccionario para almacenar datos con actionId=16 y dataId como clave
         actionid16_dict = {item.dataId: item.dataName for item in telemetria_data if item.actionId == 16 and item.dataId is not None}
-
-        # Lista para almacenar datos fusionados
         merged_data = []
-
-        # Reiniciar el iterador para recorrer nuevamente los datos
         telemetria_data = Telemetria.objects.filter(actionId__in=[16, 18]).only('dataId', 'actionId').iterator()
 
-        # Fusionar datos de actionId=18 con datos de actionId=16 basándose en dataId
         for item in telemetria_data:
             if item.actionId == 18:
                 item.dataName = actionid16_dict.get(item.dataId)
@@ -643,34 +612,19 @@ class UpdateDataEndCatchup(APIView):
 
     def post(self, request):
         try:
-            # Obtener datos fusionados
             merged_data = self.dataEnd()
-
-            # Obtener el máximo valor de recordId en la tabla MergedTelemetricEndCatchup
             id_maximo_registro = MergedTelemetricEndCatchup.objects.aggregate(max_record=Max('recordId'))['max_record'] or 0
-
-            # Filtrar los registros que tengan un recordId mayor que id_maximo_registro
             registros_filtrados = [registro for registro in merged_data if registro.recordId is not None and registro.recordId > id_maximo_registro]
 
-            # Verificar si no hay registros filtrados
             if not registros_filtrados:
                 return Response({"message": "No hay nuevos registros para crear"}, status=status.HTTP_200_OK)
 
             with transaction.atomic():
-                # Verificar si la tabla MergedTelemetricEndCatchup está vacía
                 if not MergedTelemetricEndCatchup.objects.exists():
-                    # Crear objetos MergedTelemetricEndCatchup utilizando bulk_create si la tabla está vacía
-                    MergedTelemetricEndCatchup.objects.bulk_create(
-                        [MergedTelemetricEndCatchup(**data.__dict__) for data in merged_data],
-                        ignore_conflicts=True
-                    )
+                    MergedTelemetricEndCatchup.objects.bulk_create([MergedTelemetricEndCatchup(**data.__dict__) for data in merged_data], ignore_conflicts=True)
                     return Response({"message": "Creación exitosa en base vacía"}, status=status.HTTP_200_OK)
                 else:
-                    # Crear objetos MergedTelemetricEndCatchup utilizando bulk_create si la tabla no está vacía
-                    MergedTelemetricEndCatchup.objects.bulk_create(
-                        [MergedTelemetricEndCatchup(**data.__dict__) for data in registros_filtrados],
-                        ignore_conflicts=True
-                    )
+                    MergedTelemetricEndCatchup.objects.bulk_create([MergedTelemetricEndCatchup(**data.__dict__) for data in registros_filtrados], ignore_conflicts=True)
                     return Response({"message": "Creación exitosa en base llena"}, status=status.HTTP_200_OK)
 
         except IntegrityError:
@@ -681,13 +635,8 @@ class UpdateDataEndCatchup(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get(self, request, *args, **kwargs):
-        # Obtiene todos los objetos de la tabla MergedTelemetricEndCatchup en la base de datos
         data = MergedTelemetricEndCatchup.objects.all()
-        
-        # Serializa los datos obtenidos utilizando tu propio serializador
-        serializer = MergedTelemetricCatchupSerializer(data, many=True)
-        
-        # Devuelve una respuesta con los datos serializados
+        serializer = MergedTelemetricEndCatchupSerializer(data, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 ## actualización de los datos de VOD pausados

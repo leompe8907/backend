@@ -4,7 +4,7 @@ from .views import TestFetchAndStoreTelemetry, UpdateDataOTT, UpdateDataDVB, Upd
 @shared_task
 def test_fetch_store_telemetry():
     view = TestFetchAndStoreTelemetry()
-    request = None
+    request = None  # Puede que necesites construir un request adecuado aquí
     view.post(request)
 
 @shared_task

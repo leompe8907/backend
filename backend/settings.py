@@ -28,7 +28,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
-    'django_celery_beat',
+    'django_cron',
     'telemetria',
 ]
 
@@ -183,19 +183,12 @@ LOGGING = {
 import logging.config
 logging.config.dictConfig(LOGGING)
 
-# Celery settings
-CELERY_BROKER_URL = os.getenv('REDIS_URL')
-CELERY_RESULT_BACKEND = os.getenv('REDIS_URL')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'UTC'
-
-
-# Configuración de SSL para Redis
-if CELERY_BROKER_URL and CELERY_BROKER_URL.startswith('rediss://'):
-    BROKER_USE_SSL = {
-        'ssl_cert_reqs': os.getenv('REDIS_SSL_CERT_REQS', 'CERT_NONE')
-    }
-    CELERY_BROKER_TRANSPORT_OPTIONS = {'ssl_cert_reqs': BROKER_USE_SSL['ssl_cert_reqs']}
-    CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {'ssl_cert_reqs': BROKER_USE_SSL['ssl_cert_reqs']}
+# Configuración de clases cron
+CRON_CLASSES = [
+    'telemetria.cron.TestFetchStoreTelemetryCronJob',
+    'telemetria.cron.UpdateDataOttCronJob',
+    'telemetria.cron.UpdateDataDvbCronJob',
+    'telemetria.cron.UpdateDataEndCatchupCronJob',
+    'telemetria.cron.UpdateDataStopVodCronJob',
+    'telemetria.cron.UpdateDataEndVodCronJob',
+]

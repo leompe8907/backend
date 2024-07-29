@@ -7,7 +7,6 @@ class TelemetriaSerializer(serializers.ModelSerializer):
         model = Telemetria
         fields = '__all__'
 
-
 class MergedTelemetricOTTSerializer(serializers.ModelSerializer):
     class Meta:
         model = MergedTelemetricOTT
@@ -18,12 +17,22 @@ class MergedTelemetricDVBSerializer(serializers.ModelSerializer):
         model = MergedTelemetricDVB
         fields = '__all__'
 
-class MergedTelemetricCatchupSerializer(serializers.ModelSerializer):
+class MergedTelemetricStopCatchupSerializer(serializers.ModelSerializer):
     class Meta:
-        model = MergedTelemetricStopCatchup, MergedTelemetricEndCatchup
+        model = MergedTelemetricStopCatchup
         fields = '__all__'
 
-class MergedTelemetricVODSerializer(serializers.ModelSerializer):
+class MergedTelemetricEndCatchupSerializer(serializers.ModelSerializer):
     class Meta:
-        model = MergedTelemetricStopVOD, MergedTelemetricEndVOD
+        model = MergedTelemetricEndCatchup
+        fields = '__all__'
+
+class MergedTelemetricStopVODSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MergedTelemetricStopVOD
+        fields = '__all__'
+
+class MergedTelemetricEndVODSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MergedTelemetricEndVOD
         fields = '__all__'
