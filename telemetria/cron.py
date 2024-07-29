@@ -2,8 +2,7 @@ from django_cron import CronJobBase, Schedule
 from .tasks import test_fetch_store_telemetry, update_data_ott, update_data_dvb, update_data_end_catchup, update_data_stop_vod, update_data_end_vod
 
 class TestFetchStoreTelemetryCronJob(CronJobBase):
-    RUN_EVERY_MINS = 30  # Cada 40 minutos
-
+    RUN_EVERY_MINS = 12 * 60  # Cada 12 horas
     schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
     code = 'telemetria.test_fetch_store_telemetry'  # un código único
 
