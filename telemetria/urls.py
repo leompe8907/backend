@@ -1,10 +1,10 @@
 from django.urls import path
-from .views import TestFetchAndStoreTelemetry, MergeData, UpdateDataEndCatchup, UpdateDataEndVOD, UpdateDataOTT, UpdateDataDVB, TelemetriaHome, UpdateDataStopCatchup, UpdateDataStopVOD
+from .views import TestFetchAndStoreTelemetry, UpdateDataEndCatchup, UpdateDataEndVOD, UpdateDataOTT, UpdateDataDVB, TelemetriaHome, UpdateDataStopCatchup, UpdateDataStopVOD
 
 # Definir las URL para las vistas de Django
 urlpatterns = [
     # Ruta para probar la obtención y almacenamiento de datos de telemetría
-    path('test/', TestFetchAndStoreTelemetry.as_view(), name='test'),
+    path('fetchdata/', TestFetchAndStoreTelemetry.as_view(), name='fetchdata'),
     
     # Rutas para actualizar diferentes tablas (OTT, DVB, etc.)
     path('ott/', UpdateDataOTT.as_view()),  # Actualiza la tabla ott

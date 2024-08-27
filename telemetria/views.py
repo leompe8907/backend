@@ -40,7 +40,7 @@ import hashlib
 import requests
 
 from .models import Telemetria, MergedTelemetricOTT, MergedTelemetricDVB, MergedTelemetricStopCatchup, MergedTelemetricEndCatchup, MergedTelemetricStopVOD, MergedTelemetricEndVOD  # Importa los modelos necesarios
-from .serializer import MergedTelemetricEndCatchupSerializer, MergedTelemetricStopCatchupSerializer, TelemetriaSerializer, MergedTelemetricOTTSerializer, MergedTelemetricDVBSerializer# Importa los serializadores necesarios
+from .serializer import MergedTelemetricEndCatchupSerializer, MergedTelemetricStopCatchupSerializer, TelemetriaSerializer, MergedTelemetricOTTSerializer, MergedTelemetricDVBSerializer, MergedTelemetricEndVODSerializer, MergedTelemetricStopVODSerializer# Importa los serializadores necesarios
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +244,7 @@ def fetch_data_up_to(client, highestRecordId, limit):
 
     return allTelemetryData
 
+# Funcion para hacer la consulta al CV de telemetry y obtener todos los datos
 @method_decorator(csrf_exempt, name='dispatch')
 class TestFetchAndStoreTelemetry(View):
     def post(self, request, *args, **kwargs):
@@ -298,107 +299,6 @@ def timeit(func):
         logger.info(f'{func.__name__} took {total_time:.4f} seconds')
         return result
     return timeit_wrapper
-
-class MergeData(APIView):
-    @timeit
-    def post(self, request, *args, **kwargs):
-        start_time = time.time()
-        try:
-            # Descompresión y decodificación de datos
-            decompress_start_time = time.time()
-            compressed_data = request.body
-            decompressed_data = gzip.decompress(compressed_data)
-            decompress_end_time = time.time()
-            logger.info(f"Decompression took {decompress_end_time - decompress_start_time:.4f} seconds")
-
-            # Conversión a objeto Python
-            json_load_start_time = time.time()
-            data_batch = orjson.loads(decompressed_data)
-            json_load_end_time = time.time()
-            logger.info(f"JSON load took {json_load_end_time - json_load_start_time:.4f} seconds")
-
-            # Obtención de recordIds existentes
-            record_ids_start_time = time.time()
-            record_ids = {item['recordId'] for item in data_batch if 'recordId' in item}
-            existing_record_ids = set(Telemetria.objects.filter(
-                recordId__in=record_ids
-            ).values_list('recordId', flat=True))
-            record_ids_end_time = time.time()
-            logger.info(f"Fetching existing recordIds took {record_ids_end_time - record_ids_start_time:.4f} seconds")
-
-            # Creación e inserción de objetos Telemetria
-            process_start_time = time.time()
-            batch_size = 1000
-            total_processed = 0
-            total_invalid = 0
-            with transaction.atomic():
-                telemetry_objects = []
-                for item in data_batch:
-                    if item.get('recordId') not in existing_record_ids:
-                        serializer = TelemetriaSerializer(data=item)
-                        if serializer.is_valid():
-                            # Crear el objeto Telemetria sin guardarlo en la base de datos
-                            telemetry_object = Telemetria(**serializer.validated_data)
-                            telemetry_objects.append(telemetry_object)
-                            total_processed += 1
-                        else:
-                            logger.warning(f"Invalid data: {serializer.errors}")
-                            total_invalid += 1
-                    
-                    if len(telemetry_objects) >= batch_size:
-                        Telemetria.objects.bulk_create(telemetry_objects, ignore_conflicts=True)
-                        logger.info(f"Inserted batch of {len(telemetry_objects)} objects")
-                        telemetry_objects = []
-
-                if telemetry_objects:
-                    Telemetria.objects.bulk_create(telemetry_objects, ignore_conflicts=True)
-                    logger.info(f"Inserted final batch of {len(telemetry_objects)} objects")
-
-            process_end_time = time.time()
-            logger.info(f"Processing and inserting data took {process_end_time - process_start_time:.4f} seconds")
-            logger.info(f"Total processed: {total_processed}, Total invalid: {total_invalid}")
-
-            end_time = time.time()
-            logger.info(f"Total processing time: {end_time - start_time:.4f} seconds")
-
-            return Response({
-                "message": "Data processed successfully.",
-                "total_processed": total_processed,
-                "total_invalid": total_invalid
-            }, status=status.HTTP_201_CREATED)
-
-        except orjson.JSONDecodeError as e:
-            logger.error(f"JSONDecodeError: {e}")
-            return Response({"error": "Invalid JSON format in request body."}, status=status.HTTP_400_BAD_REQUEST)
-        except KeyError as e:
-            logger.error(f"KeyError: {e}")
-            return Response({"error": f"Missing key in data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def get(self,request, *args, **kwargs):
-        try:
-            data = Telemetria.objects.all()
-            if not data.exists():
-                return Response(status=status.HTTP_204_NO_CONTENT)
-            else:
-                maxrecord = data.order_by("-recordId").first().recordId
-                return Response({"recordId_max":maxrecord}, status=status.HTTP_200_OK)
-
-
-        except json.JSONDecodeError as e:
-            return Response({"error": "Invalid JSON format in request body."}, status=status.HTTP_400_BAD_REQUEST)
-
-        except KeyError as e:
-            return Response({"error": f"Missing key in data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-
-        except ObjectDoesNotExist as e:
-            return Response({"error": "No data found."}, status=status.HTTP_404_NOT_FOUND)
-
-        except Exception as e:
-            # Registrar el error para futuras investigaciones
-            return Response({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 #--------------------------------------------------------------------------------#
 
@@ -707,7 +607,7 @@ class UpdateDataStopVOD(APIView):
         data = MergedTelemetricStopVOD.objects.all()
         
         # Serializa los datos obtenidos utilizando tu propio serializador
-        serializer = MergedTelemetricVODSerializer(data, many=True)
+        serializer = MergedTelemetricStopVODSerializer(data, many=True)
         
         # Devuelve una respuesta con los datos serializados
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -780,7 +680,7 @@ class UpdateDataEndVOD(APIView):
         data = MergedTelemetricEndVOD.objects.all()
         
         # Serializa los datos obtenidos utilizando tu propio serializador
-        serializer = MergedTelemetricVODSerializer(data, many=True)
+        serializer = MergedTelemetricEndVODSerializer(data, many=True)
         
         # Devuelve una respuesta con los datos serializados
         return Response(serializer.data, status=status.HTTP_200_OK)
